@@ -1,0 +1,46 @@
+name: carsrecong
+
+# Point to the environment file globally so CLI warnings disappear
+env_file: ./backend/.env
+
+services:
+  # Data Base Services
+  db:
+    # database service
+    image: postgres:16-alpine
+    container_name: carsrecong_db
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env # READ POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # BACKEND: FastAPI + ML Inference AI 
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: carsrecong_api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app # Hot-reload for development
+      - ./ml_models:/ml_models # Mount the weights directory (YOLO, OCR)
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  postgres_data:
+    name: carsrecong_pg_data
