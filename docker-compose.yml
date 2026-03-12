@@ -1,14 +1,11 @@
 name: carsrecong
 
-# Point to the environment file globally so CLI warnings disappear
-env_file: ./backend/.env
-
 services:
   # Data Base Services
   db:
     # database service
     image: postgres:16-alpine
-    container_name: carsrecong_db
+    container_name: cars_db
     restart: unless-stopped
     env_file:
       - ./backend/.env # READ POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
@@ -17,8 +14,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
       interval: 5s
+
       timeout: 5s
       retries: 5
 
@@ -27,7 +25,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: carsrecong_api
+    container_name: cars_backend
     restart: unless-stopped
     env_file:
       - ./backend/.env
