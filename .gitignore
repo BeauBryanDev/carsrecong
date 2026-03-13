@@ -217,4 +217,11 @@ RoadMap.png
 # Do not Track my privates dev folder for inner notes
 privates/
 
+#Ignore cars folder
+# it just has a bounch of cars images for testing and ifnerence ml models
+cars 
+
+# Ingore all .onnx ml models
+*.onnx
+
 
