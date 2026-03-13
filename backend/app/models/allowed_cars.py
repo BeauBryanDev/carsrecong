@@ -19,6 +19,7 @@ class AllowedCar(Base):
 
     # Relationship back to the user
     owner: Mapped["User"] = relationship("User", back_populates="allowed_cars")
+    detections = relationship("Detection", back_populates="allowed_car")
     
     def __repr__(self):
         return f"<AllowedCar(id={self.id}, license_plate={self.license_plate}, owner_id={self.owner_id})>"

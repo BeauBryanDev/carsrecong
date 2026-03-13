@@ -14,6 +14,7 @@ from app.db.base_class import Base
 from app.models.users import User
 from app.models.cars import Car
 from app.models.allowed_cars import AllowedCar
+from app.models.detections import Detection
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -208,6 +208,13 @@ __marimo__/
 
 # Ingore my dev notes
 /dev_notex.txt
+notes.md
 
 # Ignore the roadmap.png
 RoadMap.png
+
+
+# Do not Track my privates dev folder for inner notes
+privates/
+
+
