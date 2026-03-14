@@ -5,46 +5,57 @@ import numpy as np
 import onnxruntime as ort
 from typing import List, Tuple, Dict, Any
 
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Navigate up to ml/ and then into ml_models/
+MODELS_DIR = os.path.join(os.path.dirname(CURRENT_DIR), "ml_models")
+
+OCR_MODEL_PATH = os.path.join(MODELS_DIR, "plate_ocr.onnx")
+VEHICLE_MODEL_PATH = os.path.join(MODELS_DIR, "vehicle_yolov8m.onnx")
+PLATE_MODEL_PATH = os.path.join(MODELS_DIR, "colombian_license_plate_model.onnx")
+
+
 class MLPipelineError(Exception):
     """Custom exception for ML pipeline failures."""
     pass
 
-class VehicleDetectionPipeline: # it is ok, is it english leave all comments and docstrings
+class VehicleDetectionPipeline: 
     """
     Orchestrates the ONNX models for full-frame vehicle detection 
     and cropped license plate detection.
     """
     
-    def __init__(self, vehicle_model_path: str, plate_model_path: str, use_gpu: bool = True):
+    def __init__(self,  use_gpu: bool = True):
         """
         Initializes the ONNX Runtime sessions for the required models.
         
         Args:
-            vehicle_model_path (str): Path to the vehicle detector .onnx file.
-            plate_model_path (str): Path to the license plate detector .onnx file.
             use_gpu (bool): Whether to utilize the CUDAExecutionProvider.
         """
         self.providers = ['CUDAExecutionProvider'] if use_gpu else ['CPUExecutionProvider']
         
-        if not os.path.exists(vehicle_model_path) or not os.path.exists(plate_model_path):
+        if not os.path.exists(VEHICLE_MODEL_PATH) or not os.path.exists(PLATE_MODEL_PATH) or not os.path.exists(OCR_MODEL_PATH):
             raise MLPipelineError("ONNX model files not found. Check the ml_models directory.")
 
         # Initialize ONNX Inference Sessions
-        self.session_vehicle = ort.InferenceSession(vehicle_model_path, providers=self.providers)
-        self.session_plate = ort.InferenceSession(plate_model_path, providers=self.providers)
+        self.session_vehicle = ort.InferenceSession(VEHICLE_MODEL_PATH, providers=self.providers)
+        self.session_plate = ort.InferenceSession(PLATE_MODEL_PATH, providers=self.providers)
+        self.session_ocr = ort.InferenceSession(OCR_MODEL_PATH, providers=self.providers)
         
         # Get input names dynamically from the ONNX computational graph
         self.input_name_vehicle = self.session_vehicle.get_inputs()[0].name
         self.input_name_plate = self.session_plate.get_inputs()[0].name
+        self.input_name_ocr = self.session_ocr.get_inputs()[0].name
         
         # Map class IDs to our VehicleType schema Enum strings
         self.class_map = {
-            0: bus,
-            1: car,
-            2: microbus,
-            3: motorbike,
-            4: pickup-van,
-            5: truck,
+            0: "bus",
+            1: "car",
+            2: "microbus",
+            3: "motorbike",
+            4: "pickup-van",
+            5: "truck",
             # these are the six classes of the vehicle detector from the original
             # dataset from ROBOFLOW , this one : /vehicle-detection-by9xs-4wygy/settings
         }
@@ -66,11 +77,12 @@ class VehicleDetectionPipeline: # it is ok, is it english leave all comments and
         
         # Resize image
         img_resized = cv2.resize(img, (int(w * scale), int(h * scale)))
+        # Carefull with original image size, it can be bigger than target_size, so we need to scale it down to fit into the model's expected input size while maintaining aspect ratio.
         
         # Create a blank square canvas (padding) and place the resized image
         canvas = np.zeros((target_size, target_size, 3), dtype=np.float32)
         canvas[:img_resized.shape[0], :img_resized.shape[1], :] = img_resized
-        
+        # TENSOR R ^ C ^ H ^ W  [ 640 x 640 x 3 x 1 ]  (C=3 for BGR channels, H and W are the target_size, and batch size is 1)
         # Normalize pixel values to [0, 1] range
         canvas /= 255.0
         
@@ -127,7 +139,7 @@ class VehicleDetectionPipeline: # it is ok, is it english leave all comments and
                 
         # Apply OpenCV's built-in NMS to filter overlapping boxes (IoU logic)
         indices = cv2.dnn.NMSBoxes(boxes, scores, conf_threshold, nms_threshold=0.45)
-        
+        # Avoid Overlapping Boxes (NMS) by filtering out overlapping boxes
         if len(indices) > 0:
             for i in indices.flatten():
                 detections.append({

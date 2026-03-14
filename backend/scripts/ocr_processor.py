@@ -1,20 +1,19 @@
 
 import os
 import cv2
-import re
 import numpy as np
 import onnxruntime as ort
 from typing import Tuple
 
+
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Navigate up to ml/ and then into ml_models/
 MODELS_DIR = os.path.join(os.path.dirname(CURRENT_DIR), "ml_models")
+
 OCR_MODEL_PATH = os.path.join(MODELS_DIR, "plate_ocr.onnx")
 
 class PlateOCRProcessor:
-    """
-    Handles the execution of the CRNN-based recognition model exported from PaddleOCR.
-    Requires a preprocessed binary/grayscale tensor of the cropped plate.
-    """
     
     def __init__(self, use_gpu: bool = True):
         """
@@ -26,20 +25,23 @@ class PlateOCRProcessor:
         self.providers = ['CUDAExecutionProvider'] if use_gpu else ['CPUExecutionProvider']
         
         if not os.path.exists(OCR_MODEL_PATH):
-            raise FileNotFoundError(f"OCR ONNX model not found at {OCR_MODEL_PATH}")
+            raise FileNotFoundError("OCR ONNX model not found.")
 
         self.session = ort.InferenceSession(OCR_MODEL_PATH, providers=self.providers)
         self.input_name = self.session.get_inputs()[0].name
         
-        # Standard PP-OCRv4 English dictionary (96 characters + 1 CTC blank at index 0)
-        # Prevents IndexError when mapping the (Sequence, 97) Softmax tensor output.
-        dict_string = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&'()*+,-./:;<=>?@[\\]_`~ "
-        self.character_set = ['blank'] + list(dict_string)
+        # Restricted dictionary for Colombian plates (A-Z, 0-9)
+        # Index 0 is reserved for the CTC 'blank' token
+        self.character_set = [
+            'blank', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 
+            'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 
+            '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'
+        ]
 
     def _preprocess_for_crnn(self, processed_crop: np.ndarray) -> np.ndarray:
         """
         Resizes the preprocessed plate image to the fixed height required by the CRNN 
-        (48px for PP-OCRv4) while maintaining the aspect ratio for the width.
+        (usually 32px or 48px) while maintaining the aspect ratio for the width.
         
         Args:
             processed_crop (np.ndarray): Image processed by CLAHE and thresholding.
@@ -50,14 +52,17 @@ class PlateOCRProcessor:
         target_height = 48
         h, w = processed_crop.shape[:2]
         
+        # Calculate dynamic width based on the fixed height
         ratio = w / float(h)
         target_width = int(target_height * ratio)
         
         resized = cv2.resize(processed_crop, (target_width, target_height))
         
+        # If the image was grayscale (2D), add the channel dimension back
         if len(resized.shape) == 2:
             resized = np.expand_dims(resized, axis=-1)
             
+        # Normalize and transpose to NCHW
         tensor = resized.astype(np.float32) / 255.0
         tensor = np.transpose(tensor, (2, 0, 1))
         tensor = np.expand_dims(tensor, axis=0)
@@ -67,38 +72,40 @@ class PlateOCRProcessor:
     def _ctc_decode(self, predictions: np.ndarray) -> Tuple[str, float]:
         """
         Decodes the raw Softmax probabilities using CTC Greedy Decoding.
-        Applies Regex filtering to guarantee only alphanumeric characters.
+        Collapses repeated characters and ignores the 'blank' token.
         
         Args:
             predictions (np.ndarray): The raw output tensor from the CRNN.
             
         Returns:
-            Tuple[str, float]: The filtered decoded text and its average confidence score.
+            Tuple[str, float]: The decoded text and its average confidence score.
         """
+        # Shape is usually (batch_size, sequence_length, num_classes)
+        # We take the first batch item
         sequence = predictions[0] 
         
-        raw_text = []
+        text = []
         confidences = []
         previous_idx = 0
         
+        # Iterate over the sequence time steps
         for step in sequence:
             char_idx = int(np.argmax(step))
             confidence = float(np.max(step))
             
+            # CTC logic: ignore blanks (idx 0) and consecutive duplicates
             if char_idx != 0 and char_idx != previous_idx:
-                raw_text.append(self.character_set[char_idx])
+                text.append(self.character_set[char_idx])
                 confidences.append(confidence)
                 
             previous_idx = char_idx
             
-        unfiltered_string = "".join(raw_text)
+        final_text = "".join(text)
         
-        # Enforce Colombian plate domain math (A-Z, 0-9)
-        filtered_string = re.sub(r'[^A-Z0-9]', '', unfiltered_string.upper())
-        
+        # Avoid division by zero if nothing was detected
         avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
         
-        return filtered_string, avg_confidence
+        return final_text, avg_confidence
 
     def extract_text(self, processed_crop: np.ndarray) -> Tuple[str, float]:
         """
@@ -111,6 +118,8 @@ class PlateOCRProcessor:
             Tuple[str, float]: The license plate text and confidence.
         """
         tensor = self._preprocess_for_crnn(processed_crop)
+        
+        # Run the ONNX computational graph
         outputs = self.session.run(None, {self.input_name: tensor})
         raw_probabilities = outputs[0]
         

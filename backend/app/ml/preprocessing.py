@@ -12,17 +12,21 @@ def preprocess_for_ocr(cropped_plate: np.ndarray) -> np.ndarray:
     Returns:
         np.ndarray: A preprocessed, single-channel (grayscale/binary) image ready for OCR.
     """
-    # 1. Convert BGR (OpenCV default) to Grayscale
+    # I. Convert BGR (OpenCV default) to Grayscale
     gray = cv2.cvtColor(cropped_plate, cv2.COLOR_BGR2GRAY)
+    #  A. Convert to single channel (grayscale) for OCR
+    #  Y =  0.2126 * R + 0.7152 * G + 0.0722 * B
     
-    # 2. Apply CLAHE to enhance local contrast, especially useful for shadows or glare
+    # II. Apply CLAHE to enhance local contrast, especially useful for shadows or glare
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    enhanced_gray = clahe.apply(gray)
+    enhanced_gray = clahe.apply(gray) #  Divde by 255 to normalize to [0, 1] range for better contrast enhancement
     
-    # 3. Apply a slight Gaussian Blur to remove high-frequency noise before binarization
+    # III. Apply a slight Gaussian Blur to remove high-frequency noise before binarization
     blurred = cv2.GaussianBlur(enhanced_gray, (3, 3), 0)
+    #  G(x,y) = (1/(2*pi*sigma^2)) * e^(-(x^2 + y^2)/(2*sigma^2))
+    #  where sigma is the standard deviation of the Gaussian kernel, and (x, y) are the coordinates of the kernel relative to its center.
     
-    # 4. Adaptive Thresholding to binarize the image (black and white)
+    # IV. Adaptive Thresholding to binarize the image (black and white)
     # The block size is 11, and the constant C subtracted from the mean is 2.
     binary = cv2.adaptiveThreshold(
         blurred, 
@@ -32,10 +36,13 @@ def preprocess_for_ocr(cropped_plate: np.ndarray) -> np.ndarray:
         11, 
         2
     )
+    # T(x,y) =  Gaussian(x,y) * C + mean
+    # if  p(x,y) > T(x,y) then pixel(x,y) = 1 else pixel(x,y) = 0
     
     return binary
 
-def extract_plate_crop(frame: np.ndarray, bbox: list[int], padding : float = 0.12 ) -> np.ndarray:
+
+def extract_plate_crop(frame: np.ndarray, bbox: list[int], padding: float = 0.12) -> np.ndarray:
     """
     Safely extracts the bounding box region from the main video frame.
     
@@ -49,7 +56,8 @@ def extract_plate_crop(frame: np.ndarray, bbox: list[int], padding : float = 0.1
     """
     x_min, y_min, x_max, y_max = [int(coord) for coord in bbox]
     
-    # Ensure coordinates do not fall out of the frame tensor boundaries
+    # [BUG FIX] Extract spatial dimensions (Height, Width) from the frame tensor
+    height, width = frame.shape[:2]
     
     # Calculate dynamic padding based on the bounding box dimensions
     pad_x = int((x_max - x_min) * padding)
