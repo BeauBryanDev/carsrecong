@@ -11,7 +11,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 # Navigate up to ml/ and then into ml_models/
 MODELS_DIR = os.path.join(os.path.dirname(CURRENT_DIR), "ml_models")
 
-OCR_MODEL_PATH = os.path.join(MODELS_DIR, "plate_ocr.onnx")
+#OCR_MODEL_PATH = os.path.join(MODELS_DIR, "plate_ocr.onnx")
 VEHICLE_MODEL_PATH = os.path.join(MODELS_DIR, "vehicle_yolov8m.onnx")
 PLATE_MODEL_PATH = os.path.join(MODELS_DIR, "colombian_license_plate_model.onnx")
 
@@ -35,18 +35,18 @@ class VehicleDetectionPipeline:
         """
         self.providers = ['CUDAExecutionProvider'] if use_gpu else ['CPUExecutionProvider']
         
-        if not os.path.exists(VEHICLE_MODEL_PATH) or not os.path.exists(PLATE_MODEL_PATH) or not os.path.exists(OCR_MODEL_PATH):
+        if not os.path.exists(VEHICLE_MODEL_PATH) or not os.path.exists(PLATE_MODEL_PATH) :
             raise MLPipelineError("ONNX model files not found. Check the ml_models directory.")
 
         # Initialize ONNX Inference Sessions
         self.session_vehicle = ort.InferenceSession(VEHICLE_MODEL_PATH, providers=self.providers)
         self.session_plate = ort.InferenceSession(PLATE_MODEL_PATH, providers=self.providers)
-        self.session_ocr = ort.InferenceSession(OCR_MODEL_PATH, providers=self.providers)
+        #self.session_ocr = ort.InferenceSession(OCR_MODEL_PATH, providers=self.providers)
         
         # Get input names dynamically from the ONNX computational graph
         self.input_name_vehicle = self.session_vehicle.get_inputs()[0].name
         self.input_name_plate = self.session_plate.get_inputs()[0].name
-        self.input_name_ocr = self.session_ocr.get_inputs()[0].name
+        #self.input_name_ocr = self.session_ocr.get_inputs()[0].name
         
         # Map class IDs to our VehicleType schema Enum strings
         self.class_map = {

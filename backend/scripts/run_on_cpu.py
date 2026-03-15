@@ -17,7 +17,7 @@ def run_pipeline_test():
     """Executes the cascading ML models on a single RAW test image."""
     
     # We enforce the use of a raw, unedited street image for an end-to-end test.
-    image_path = os.path.join(backend_dir, "raw_test_image.jpg")
+    image_path = os.path.join(backend_dir, "./test_vehicle_01.jpeg")
     
     print(f"[INFO] Loading image from: {image_path}")
     frame = cv2.imread(image_path)
